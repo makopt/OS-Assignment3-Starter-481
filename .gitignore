@@ -1,30 +1,58 @@
-# Java
-*.class
-*.jar
-*.log
-hs_err_pid*
+# My Work Documentation - Assignment 3: Synchronization
 
-# Build output
-bin/
-out/
-target/
-build/
+**Name:** ZEAD QADHAN
+**Student ID:** 446050208
+**Completion Date:** November 25, 2026
+**GitHub Repository:** https://github.com/ZEAD0/Operating-Systems-Scheduler-Synchronization-446050208
+**Demo Video Link:**
 
-# IDE / editor
-.vscode/
-.idea/
-*.iml
-.classpath
-.project
-.settings/
-*.swp
-*~
+---
 
-# OS
-.DS_Store
-Thumbs.db
-._*
+## Development Log
 
-# Claude Code
-CLAUDE.md
-.claude/
+### Entry 1: 2026-11-18 - Understanding the problem and setting up the project
+I started by reading the assignment requirements and understanding that the main problem is Race Condition. I opened the Assignment 1 code and studied how the Ready Queue and CPUs work. I set up the repository on GitHub and made sure the original code runs before any modification, so I have a reference point for comparison.
+
+### Entry 2: 2026-11-20 - Implementing Ready Queue Lock
+I added a `ReentrantLock` named `queueLock` in the `ReadyQueue` class. I protected all methods that touch the list and map: `add()`, `poll()`, `processOf()`, and `snapshot()`. I used the pattern `lock()` at the start and `unlock()` in `finally` so the lock is released even if an error happens. I tested the run and confirmed that processes are not lost from the queue.
+
+### Entry 3: 2026-11-22 - Implementing Statistics Lock
+I added one lock `statsLock` in the `SharedStats` class to protect the three counters: `contextSwitchCount`, `completedProcessCount`, and `totalServiceTime`. I chose one lock instead of three because the counters are always read together in the verification block, the critical sections are very short, and this avoids deadlock and simplifies the code. After this, the verification results matched the expected values.
+
+### Entry 4: 2026-11-24 - Replacing Busy-Waiting with Semaphore
+I added `Semaphore readyCount = new Semaphore(0)` in `ReadyQueue`. In `add()` I call `release()` after releasing the lock, and in `CpuWorker` I call `acquire()` before taking a process. Now the CPU sleeps instead of spinning. I also added `releaseAllForShutdown()` to wake up all CPUs at the end so they terminate cleanly without hanging forever.
+
+### Entry 5: 2026-11-25 - Testing and Final Verification
+I ran the program several times and confirmed the verification is all correct: `Context switches`, `Completed processes`, and `Total service time` match, and `Busy-waiting polls = 0`. I recorded the demo video explaining the three features and showing the run in the IDE, then pushed all changes to GitHub.
+
+---
+
+## Reflection
+
+### 1. What was the hardest part of synchronization? Why?
+The hardest part was thinking about deadlock. I was afraid that holding the lock while waiting on the Semaphore would hang the program forever. I learned that I must call `acquire()` without holding the lock, and call `release()` after releasing the lock. This taught me that the order of locking and waiting is more important than the lock itself, and a small mistake in order stops the whole program.
+
+### 2. How did your understanding of Race Condition develop?
+At first I thought a Race Condition only happens when there is an obvious error. After this assignment I understood it happens because of a `read - modify - write` operation without protection. Even if the code is one line like `count = count + 1`, two Threads can read the same value and one update is lost. Now when I see any shared variable I ask myself: does it need a lock?
+
+### 3. What would you do differently next time?
+Next time I will start with a small test for each feature alone before merging them all. In this assignment I did the three features one after another and it was hard to know where an error came from. If I had tested the first lock alone, then the second, then the Semaphore, it would have been easier to track errors and understand the effect of each feature on the output.
+
+### 4. How does this assignment relate to real operating systems?
+This assignment is the same idea as a real scheduler in an operating system. A real Ready Queue must be protected because more than one CPU takes from it, and the Semaphore is the same idea as `sleep/wakeup` in the kernel. I now understand why the OS does not let the CPU spin uselessly, because it wastes energy and time, and instead it puts it to sleep and wakes it when a new process arrives.
+
+---
+
+## Technical Answers
+
+### 1. Race Condition in Your Output
+In my original code without locks, an update to a counter could be lost. For example, two CPUs could execute `contextSwitchCount = tmp + 1` at the same time after reading the same `tmp`. In my output after protection, the value is `expected = observed` in every line of the verification. This proves the lock prevented lost updates.
+
+### 2. Critical Sections and Lock Granularity
+I used one lock `queueLock` for the whole Ready Queue because the list and map must change together as one unit. If I used two separate locks, one could add to the list without adding to the map. For statistics I used one lock `statsLock` because the critical sections are very short (just read and modify), so the loss in concurrency is small and the benefit is simplicity and deadlock prevention.
+
+### 3. Busy Waiting vs Semaphore
+Busy Waiting made the CPU loop in a `while` and check the queue continuously without benefit. In my new code the CPU calls `readyCount.acquire()` and sleeps until `add()` calls `release()`. The difference shows in my output: `Busy-waiting polls = 0`, meaning there was no useless spinning. This saves CPU time and makes the program calmer and faster.
+
+### 4. Classical Problems and Deadlock
+My problem is like the Producer-Consumer problem. The Main thread produces processes and the CPUs consume them. I prevented deadlock with three rules: first, never hold `queueLock` while waiting on the Semaphore, second, call `release()` after releasing the lock, third, on shutdown call `release(totalCPUs)` so all sleeping CPUs wake up and exit the loop instead of hanging forever.
